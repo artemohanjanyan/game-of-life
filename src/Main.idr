@@ -11,14 +11,6 @@ import Effect.State
 import Effect.StdIO
 import Effect.Random
 
--- Global variables we'll manage as State effects
-
-data Vars = Position -- position of ellipse
-          | XMove -- movement of ellipse
-          | YMove -- movement of ellipse
-          | Frames -- count of frames so far
-          | Starfield -- position of stars in the background
-
 -- SDL effect is parameterised by an underyling 'surface' resource which
 -- only exists when initialised.
 
@@ -26,14 +18,16 @@ data Vars = Position -- position of ellipse
 -- generation and console I/O
 
 Prog : Type -> Type -> Type
-Prog i t = Eff t [SDL i, 
-                   Position ::: STATE (Int, Int), 
-                   XMove ::: STATE Int,
-                   YMove ::: STATE Int,
-                   Frames ::: STATE Integer,
-                   Starfield ::: STATE (List (Int, Int)),
-                   RND,
-                   STDIO]
+Prog i t = Eff t
+    [ SDL i
+    , 'Position ::: STATE (Int, Int)
+    , 'XMove ::: STATE Int
+    , 'YMove ::: STATE Int
+    , 'Frames ::: STATE Integer
+    , 'Starfield ::: STATE (List (Int, Int))
+    , RND
+    , STDIO
+    ]
 
 -- Convenient shorthand for initialised SDL
 Running : Type -> Type
@@ -54,7 +48,7 @@ updateStarfield xs = upd [] xs where
              x <- rndInt 0 639
              upd ((fromInteger x, 0) :: acc) xs
            else
-             upd ((x, y+1) :: acc) xs
+             upd ((x, y + 1) :: acc) xs
 
 drawStarfield : List (Int, Int) -> Eff () [STDIO, SDL_ON]
 drawStarfield [] = pure ()
@@ -67,40 +61,36 @@ drawStarfield ((x, y) :: xs) = do line white x y x y
 
 emain : Prog () ()
 emain = do initialise 640 480
-           Position :- put (320, 200)
+           'Position :- put (320, 200)
            s <- initStarfield [] 100
-           Starfield :- put s
+           'Starfield :- put s
            eventLoop
            quit
   where process : Maybe Event -> Running Bool
         process (Just AppQuit) = pure False
-
-        process (Just (KeyDown KeyLeftArrow))  = do XMove :- put (-1)
-                                                    pure True
-        process (Just (KeyUp KeyLeftArrow))    = do XMove :- put 0
-                                                    pure True
-        process (Just (KeyDown KeyRightArrow)) = do XMove :- put 1
-                                                    pure True
-        process (Just (KeyUp KeyRightArrow))   = do XMove :- put 0
-                                                    pure True
-        process (Just (KeyDown KeyUpArrow))    = do YMove :- put (-1)
-                                                    pure True
-        process (Just (KeyUp KeyUpArrow))      = do YMove :- put 0
-                                                    pure True
-        process (Just (KeyDown KeyDownArrow))  = do YMove :- put 1
-                                                    pure True
-        process (Just (KeyUp KeyDownArrow))    = do YMove :- put 0
-                                                    pure True
+        process (Just keyevent) = process' keyevent *> pure True
+          where
+            process' : Event -> Running ()
+            process' (KeyDown KeyLeftArrow)  = 'XMove :- put (-1)
+            process' (KeyUp KeyLeftArrow)    = 'XMove :- put 0
+            process' (KeyDown KeyRightArrow) = 'XMove :- put 1
+            process' (KeyUp KeyRightArrow)   = 'XMove :- put 0
+            process' (KeyDown KeyUpArrow)    = 'YMove :- put (-1)
+            process' (KeyUp KeyUpArrow)      = 'YMove :- put 0
+            process' (KeyDown KeyDownArrow)  = 'YMove :- put 1
+            process' (KeyUp KeyDownArrow)    = 'YMove :- put 0
+            process' _                       = putStrLn "?"
         process _ = pure True
 
         draw : Running ()
         draw = do rectangle black 0 0 640 480
                   rectangle cyan 50 50 50 50
-                  (x, y) <- Position :- get
+                  (x, y) <- 'Position :- get
                   ellipse yellow x y 20 20
-                  s <- Starfield :- get
+                  s <- 'Starfield :- get
                   drawStarfield s
                   flip
+--rectangle black 0 0 640 480
 
         -- update the world state by moving the ellipse to a new position
         -- and scrolling the starfield. Also print the number of frames
@@ -108,17 +98,17 @@ emain = do initialise 640 480
 
         updateWorld : Running ()
         updateWorld
-               = do f <- Frames :- get
-                    s <- Starfield :- get
+               = do f <- 'Frames :- get
+                    s <- 'Starfield :- get
                     s' <- updateStarfield s
-                    Starfield :- put s'
-                    Frames :- put (f + 1)
-                    when ((f `mod` 100) == 0) (putStrLn (show f))
+                    'Starfield :- put s'
+                    'Frames :- put (f + 1)
+                    when ((f `mod` 1000) == 0) (putStrLn (show f))
 
-                    (x, y) <- Position :- get
-                    xm <- XMove :- get
-                    ym <- YMove :- get
-                    Position :- put (x + xm, y + ym)
+                    (x, y) <- 'Position :- get
+                    xm <- 'XMove :- get
+                    ym <- 'YMove :- get
+                    'Position :- put (x + xm, y + ym)
 
         -- Event loop simply has to draw the current state, update the
         -- state according to how the ellipse is moving, then process
@@ -132,11 +122,12 @@ emain = do initialise 640 480
                        when continue eventLoop
 
 main : IO ()
-main = runInit [(), Position := (320,200), 
-                XMove := 0, 
-                YMove := 0, 
-                Frames := 0,
-                Starfield := List.Nil,
+main = runInit [(),
+                'Position := (320,200), 
+                'XMove := 0, 
+                'YMove := 0, 
+                'Frames := 0,
+                'Starfield := List.Nil,
                 1234567890,
                 ()] emain
 

@@ -1,0 +1,13 @@
+package game_of_life
+
+pkgs = effects
+     , containers
+     , sdl
+
+modules = Main
+
+opts = "--warnreach"
+
+sourcedir = src
+executable = main
+main = Main

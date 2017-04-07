@@ -5,6 +5,7 @@ pkgs = effects
      , sdl
 
 modules = Main
+        , Grid
 
 opts = "--warnreach"
 

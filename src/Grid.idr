@@ -1,9 +1,9 @@
 module Grid
 
-import Data.AVL.Set
+import public Data.AVL.Set
 import Data.AVL.Dict
 
-%access export
+%access public export
 
 Point : Type
 Point = (Int, Int)
@@ -15,18 +15,21 @@ addPoints (a, b) (c, d) = (a + c, b + d)
 
 record Grid where
     constructor MkGrid
-    bounds : (Point, Nat, Nat)
+    leftX, topX, columnN, rowN : Int
     lifes : Set Point
 
 %name Grid grid
 
-inBounds : (Point, Nat, Nat) -> Point -> Bool
-inBounds ((x, y), w, h) (a, b) =
-    x <= a && a < x + toIntNat w && y <= b && b < y + toIntNat h
+inBounds : Point -> Grid -> Bool
+inBounds (a, b) (MkGrid x y w h _) =
+    x <= a && a < x + w && y <= b && b < y + h
+
+containsLife : Point -> Grid -> Bool
+containsLife point grid = contains point (lifes grid)
 
 addLife : Point -> Grid -> Grid
 addLife point grid =
-    if inBounds (bounds grid) point
+    if inBounds point grid
        then record { lifes $= insert point } grid
        else grid
 
@@ -46,7 +49,7 @@ nextGeneration grid =
                       (-1,  1), (0,  1), (1,  1)]
 
     lifeNeighbours : Point -> List Point
-    lifeNeighbours point = filter (inBounds $ bounds grid) $ map (addPoints point) neighbourCells
+    lifeNeighbours point = filter (flip inBounds grid) $ map (addPoints point) neighbourCells
 
     addNeighbour : Dict Point Nat -> Point -> Dict Point Nat
     addNeighbour dict point =

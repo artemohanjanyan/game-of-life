@@ -1,134 +1,94 @@
 module Main
 
-{- Test program for SDL effect - draws a rectangle and an ellipse on a
-scrolling starfield background, with the position of the ellipse 
-controlled by the arrow keys -}
-
 import Effects
-
 import Effect.SDL
 import Effect.State
 import Effect.StdIO
 import Effect.Random
+import Sleep
 
--- SDL effect is parameterised by an underyling 'surface' resource which
--- only exists when initialised.
-
--- The program supports SDL, carries state, and supports random number
--- generation and console I/O
+import Grid
+import GridSDL
 
 Prog : Type -> Type -> Type
 Prog i t = Eff t
     [ SDL i
-    , 'Position ::: STATE (Int, Int)
-    , 'XMove ::: STATE Int
-    , 'YMove ::: STATE Int
+    , 'Grid ::: STATE Grid
     , 'Frames ::: STATE Integer
-    , 'Starfield ::: STATE (List (Int, Int))
     , RND
     , STDIO
+    , SLEEP
     ]
 
--- Convenient shorthand for initialised SDL
+config : Config
+config = MkConfig 640 480
+
 Running : Type -> Type
 Running t = Prog SDLSurface t
 
-initStarfield : List (Int, Int) -> Int -> Eff (List (Int, Int)) [RND]
-initStarfield acc 0 = pure acc
-initStarfield acc n = do x <- rndInt 0 639
-                         y <- rndInt 0 479
-                         initStarfield ((fromInteger x, fromInteger y) :: acc) (n - 1)
-
-updateStarfield : List (Int, Int) -> Eff (List (Int, Int)) [RND]
-updateStarfield xs = upd [] xs where
-  upd : List (Int, Int) -> List (Int, Int) -> Eff (List (Int, Int)) [RND]
-  upd acc [] = pure acc
-  upd acc ((x, y) :: xs)
-      = if (y > 479) then do
-             x <- rndInt 0 639
-             upd ((fromInteger x, 0) :: acc) xs
-           else
-             upd ((x, y + 1) :: acc) xs
-
-drawStarfield : List (Int, Int) -> Eff () [STDIO, SDL_ON]
-drawStarfield [] = pure ()
-drawStarfield ((x, y) :: xs) = do line white x y x y
-                                  drawStarfield xs
-
--- Main program - set up SDL, put the ellipse in a starting position,
--- set up an intiial starfield in random locations, then run an
--- event loop.
-
 emain : Prog () ()
-emain = do initialise 640 480
-           'Position :- put (320, 200)
-           s <- initStarfield [] 100
-           'Starfield :- put s
-           eventLoop
-           quit
-  where process : Maybe Event -> Running Bool
-        process (Just AppQuit) = pure False
-        process (Just keyevent) = process' keyevent *> pure True
-          where
-            process' : Event -> Running ()
-            process' (KeyDown KeyLeftArrow)  = 'XMove :- put (-1)
-            process' (KeyUp KeyLeftArrow)    = 'XMove :- put 0
-            process' (KeyDown KeyRightArrow) = 'XMove :- put 1
-            process' (KeyUp KeyRightArrow)   = 'XMove :- put 0
-            process' (KeyDown KeyUpArrow)    = 'YMove :- put (-1)
-            process' (KeyUp KeyUpArrow)      = 'YMove :- put 0
-            process' (KeyDown KeyDownArrow)  = 'YMove :- put 1
-            process' (KeyUp KeyDownArrow)    = 'YMove :- put 0
-            process' _                       = putStrLn "?"
-        process _ = pure True
+emain = do
+    initialise (width config) (height config)
+    eventLoop
+    quit
+  where
+    process : Maybe Event -> Running Bool
+    process (Just AppQuit) = pure False
+    process (Just (MouseButtonDown Left mouseX mouseY)) = do
+        grid <- 'Grid :- get
+        let point = mouseToPoint (mouseX, mouseY) config grid
+        'Grid :- update (addLife point)
+        pure True
+    process (Just (MouseButtonDown Right mouseX mouseY)) = do
+        grid <- 'Grid :- get
+        let point = mouseToPoint (mouseX, mouseY) config grid
+        'Grid :- update (removeLife point)
+        pure True
+    process _        = pure True
 
-        draw : Running ()
-        draw = do rectangle black 0 0 640 480
-                  rectangle cyan 50 50 50 50
-                  (x, y) <- 'Position :- get
-                  ellipse yellow x y 20 20
-                  s <- 'Starfield :- get
-                  drawStarfield s
-                  flip
---rectangle black 0 0 640 480
+    --process (Just keyevent) = process' keyevent *> pure True
+    --  where
+    --    process' : Event -> Running ()
+    --    process' (KeyDown KeyLeftArrow)  = 'XMove :- put (-1)
+    --    process' (KeyUp KeyLeftArrow)    = 'XMove :- put 0
+    --    process' (KeyDown KeyRightArrow) = 'XMove :- put 1
+    --    process' (KeyUp KeyRightArrow)   = 'XMove :- put 0
+    --    process' (KeyDown KeyUpArrow)    = 'YMove :- put (-1)
+    --    process' (KeyUp KeyUpArrow)      = 'YMove :- put 0
+    --    process' (KeyDown KeyDownArrow)  = 'YMove :- put 1
+    --    process' (KeyUp KeyDownArrow)    = 'YMove :- put 0
+    --    process' _                       = pure ()
 
-        -- update the world state by moving the ellipse to a new position
-        -- and scrolling the starfield. Also print the number of frames
-        -- drawn so far every so often.
+    draw : Running ()
+    draw = do
+        rectangle black 0 0 640 480
+        grid <- 'Grid :- get
+        drawGrid config grid
+        flip
 
-        updateWorld : Running ()
+    updateWorld : Running ()
+    updateWorld = do
+        f <- 'Frames :- get
+        'Frames :- put (f + 1)
+        when ((f `mod` 1000) == 0) (putStrLn (show f))
+
+        'Grid :- update nextGeneration
+
+    eventLoop : Running ()
+    eventLoop = do
+        draw
+        sleep 15000
         updateWorld
-               = do f <- 'Frames :- get
-                    s <- 'Starfield :- get
-                    s' <- updateStarfield s
-                    'Starfield :- put s'
-                    'Frames :- put (f + 1)
-                    when ((f `mod` 1000) == 0) (putStrLn (show f))
-
-                    (x, y) <- 'Position :- get
-                    xm <- 'XMove :- get
-                    ym <- 'YMove :- get
-                    'Position :- put (x + xm, y + ym)
-
-        -- Event loop simply has to draw the current state, update the
-        -- state according to how the ellipse is moving, then process
-        -- any incoming events
-
-        eventLoop : Running ()
-        eventLoop = do draw
-                       updateWorld
-                       e <- poll
-                       continue <- process e
-                       when continue eventLoop
+        e <- poll
+        continue <- process e
+        when continue eventLoop
 
 main : IO ()
-main = runInit [(),
-                'Position := (320,200), 
-                'XMove := 0, 
-                'YMove := 0, 
-                'Frames := 0,
-                'Starfield := List.Nil,
-                1234567890,
-                ()] emain
-
-
+main = runInit
+    [ ()
+    , 'Grid := MkGrid 0 0 16 12 (fromList [(1, 0), (1, 1), (1, 2)])
+    , 'Frames := 0
+    , 1234567890
+    , ()
+    , ()
+    ] emain

@@ -1,3 +1,5 @@
+module Sleep
+
 import Effects
 import System
 import Control.IOExcept

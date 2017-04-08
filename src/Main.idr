@@ -10,10 +10,20 @@ import Sleep
 import Grid
 import GridSDL
 
+data PlayStatus
+    = Playing
+    | Paused
+
+implementation Eq PlayStatus where
+    Playing == Playing = True
+    Paused  == Paused  = True
+    _       == _       = False
+
 Prog : Type -> Type -> Type
 Prog i t = Eff t
     [ SDL i
     , 'Grid ::: STATE Grid
+    , 'PlayStatus ::: STATE PlayStatus
     , 'Frames ::: STATE Integer
     , RND
     , STDIO
@@ -44,20 +54,13 @@ emain = do
         let point = mouseToPoint (mouseX, mouseY) config grid
         'Grid :- update (removeLife point)
         pure True
+    process (Just (KeyDown KeySpace)) = do
+        playStatus <- 'PlayStatus :- get
+        case playStatus of
+             Playing => 'PlayStatus :- put Paused
+             _       => 'PlayStatus :- put Playing
+        pure True
     process _        = pure True
-
-    --process (Just keyevent) = process' keyevent *> pure True
-    --  where
-    --    process' : Event -> Running ()
-    --    process' (KeyDown KeyLeftArrow)  = 'XMove :- put (-1)
-    --    process' (KeyUp KeyLeftArrow)    = 'XMove :- put 0
-    --    process' (KeyDown KeyRightArrow) = 'XMove :- put 1
-    --    process' (KeyUp KeyRightArrow)   = 'XMove :- put 0
-    --    process' (KeyDown KeyUpArrow)    = 'YMove :- put (-1)
-    --    process' (KeyUp KeyUpArrow)      = 'YMove :- put 0
-    --    process' (KeyDown KeyDownArrow)  = 'YMove :- put 1
-    --    process' (KeyUp KeyDownArrow)    = 'YMove :- put 0
-    --    process' _                       = pure ()
 
     draw : Running ()
     draw = do
@@ -72,7 +75,8 @@ emain = do
         'Frames :- put (f + 1)
         when ((f `mod` 1000) == 0) (putStrLn (show f))
 
-        'Grid :- update nextGeneration
+        playStatus <- 'PlayStatus :- get
+        when (playStatus == Playing) ('Grid :- update nextGeneration)
 
     eventLoop : Running ()
     eventLoop = do
@@ -87,6 +91,7 @@ main : IO ()
 main = runInit
     [ ()
     , 'Grid := MkGrid 0 0 16 12 (fromList [(1, 0), (1, 1), (1, 2)])
+    , 'PlayStatus := Paused
     , 'Frames := 0
     , 1234567890
     , ()

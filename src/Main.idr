@@ -56,14 +56,32 @@ Running t = Prog SDLSurface t
 
 resetState : Running ()
 resetState = do
-    'Grid :- put (MkGrid 0 0 128 96 (fromList [(1, 0), (1, 1), (1, 2)]))
+    'Grid :- put (MkGrid 0 0 128 96 (fromList [(1, 1), (1, 2), (2, 1), (3, 4), (4, 3), (4, 4)]))
     'GridWindow :- put (MkGridWindow 0 0 32 24)
     'PlayStatus :- put Paused
     'NavigateStatus :- put (0, 0)
     'IOStatus :- put NoIO
 
+greeting : String
+greeting = """Controls:
+  ARROW KEYS — pan;
+  =          — zoom in;
+  -          — zoom out;
+
+  SPACE      — play / pause;
+  n          — next generation;
+
+  c          — reset grid;
+  r I        — read grid number 'I';
+  w I        — save current grid by number 'I';
+  u          — cancel I/O operation.
+
+Sample grid is saved by number '1'.
+"""
+
 emain : Prog () ()
 emain = do
+    putStr greeting
     initialise (width config) (height config)
     resetState
     eventLoop
@@ -197,7 +215,7 @@ emain = do
     updateWorld = do
         f <- 'Frames :- get
         'Frames :- put (f + 1)
-        when ((f `mod` 1000) == 0) (putStrLn (show f))
+        --when ((f `mod` 1000) == 0) (putStrLn (show f))
 
         gridWindow <- 'GridWindow :- get
         let speedFactor = \x => (x * 32 * 32 `div` columnN gridWindow) `div` columnN gridWindow

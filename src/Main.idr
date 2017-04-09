@@ -20,6 +20,9 @@ implementation Eq PlayStatus where
     Step    == Step    = True
     _       == _       = False
 
+NavigateStatus : Type
+NavigateStatus = (Int, Int)
+
 config : Config
 config = MkConfig 640 480
 
@@ -29,6 +32,7 @@ Prog i t = Eff t
     , 'Grid ::: STATE Grid
     , 'GridWindow ::: STATE GridWindow
     , 'PlayStatus ::: STATE PlayStatus
+    , 'NavigateStatus ::: STATE NavigateStatus
     , 'Frames ::: STATE Integer
     , RND
     , STDIO
@@ -60,18 +64,38 @@ emain = do
 
     -- Navigation
     process (Just (KeyDown KeyLeftArrow)) = do
-        'GridWindow :- update (\window => record { leftX $= (\x => x - 1) } window)
+        (_, dy) <- 'NavigateStatus :- get
+        'NavigateStatus :- put (-1, dy)
         pure True
     process (Just (KeyDown KeyUpArrow)) = do
-        'GridWindow :- update (\window => record { topX $= (\x => x - 1) } window)
+        (dx, _) <- 'NavigateStatus :- get
+        'NavigateStatus :- put (dx, -1)
         pure True
     process (Just (KeyDown KeyRightArrow)) = do
-        'GridWindow :- update (\window => record { leftX $= (+1) } window)
+        (_, dy) <- 'NavigateStatus :- get
+        'NavigateStatus :- put (1, dy)
         pure True
     process (Just (KeyDown KeyDownArrow)) = do
-        'GridWindow :- update (\window => record { topX $= (+1) } window)
+        (dx, _) <- 'NavigateStatus :- get
+        'NavigateStatus :- put (dx, 1)
         pure True
-    process (Just (KeyDown (KeyAny '-'))) = do
+    process (Just (KeyUp KeyLeftArrow)) = do
+        (_, dy) <- 'NavigateStatus :- get
+        'NavigateStatus :- put (0, dy)
+        pure True
+    process (Just (KeyUp KeyUpArrow)) = do
+        (dx, _) <- 'NavigateStatus :- get
+        'NavigateStatus :- put (dx, 0)
+        pure True
+    process (Just (KeyUp KeyRightArrow)) = do
+        (_, dy) <- 'NavigateStatus :- get
+        'NavigateStatus :- put (0, dy)
+        pure True
+    process (Just (KeyUp KeyDownArrow)) = do
+        (dx, _) <- 'NavigateStatus :- get
+        'NavigateStatus :- put (dx, 0)
+        pure True
+    process (Just (KeyUp (KeyAny '-'))) = do
         gridWindow <- 'GridWindow :- get
         when (columnN gridWindow <= 32) ('GridWindow :- put
                 (record { columnN $= (*2), rowN $= (*2) } gridWindow))
@@ -109,7 +133,15 @@ emain = do
         when ((f `mod` 1000) == 0) (putStrLn (show f))
 
         gridWindow <- 'GridWindow :- get
-        let playCycle = (12 * 32 * 32 `div` columnN gridWindow) `div` columnN gridWindow
+        let speedFactor = \x => (x * 32 * 32 `div` columnN gridWindow) `div` columnN gridWindow
+
+        let navigateCycle = speedFactor 4
+        (dx, dy) <- 'NavigateStatus :- get
+        when ((f `mod` (the Integer (cast navigateCycle))) == 0) $ do
+            'GridWindow :- update (\window => record { leftX $= (+dx), topX $= (+dy) } window)
+
+        --gridWindow <- 'GridWindow :- get
+        let playCycle = speedFactor 12
         playStatus <- 'PlayStatus :- get
         when (playStatus /= Paused && (f `mod` (the Integer (cast playCycle))) == 0) $ do
             'Grid :- update nextGeneration
@@ -130,6 +162,7 @@ main = runInit
     , 'Grid := MkGrid 0 0 128 96 (fromList [(1, 0), (1, 1), (1, 2)])
     , 'GridWindow := MkGridWindow 0 0 32 24
     , 'PlayStatus := Paused
+    , 'NavigateStatus := (0, 0)
     , 'Frames := 0
     , 1234567890
     , ()

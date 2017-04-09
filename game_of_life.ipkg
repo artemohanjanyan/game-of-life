@@ -7,7 +7,7 @@ pkgs = effects
 modules = Main
         , Grid
         , GridSDL
-        , Sleep
+        , GridIO
 
 opts = "--warnreach"
 

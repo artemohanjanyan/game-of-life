@@ -5,7 +5,6 @@ import Effect.SDL
 import Effect.State
 import Effect.StdIO
 import Effect.Random
-import Sleep
 
 import Grid
 import GridSDL
@@ -13,11 +12,16 @@ import GridSDL
 data PlayStatus
     = Playing
     | Paused
+    | Step
 
 implementation Eq PlayStatus where
     Playing == Playing = True
     Paused  == Paused  = True
+    Step    == Step    = True
     _       == _       = False
+
+config : Config
+config = MkConfig 640 480
 
 Prog : Type -> Type -> Type
 Prog i t = Eff t
@@ -27,11 +31,7 @@ Prog i t = Eff t
     , 'Frames ::: STATE Integer
     , RND
     , STDIO
-    , SLEEP
     ]
-
-config : Config
-config = MkConfig 640 480
 
 Running : Type -> Type
 Running t = Prog SDLSurface t
@@ -60,6 +60,9 @@ emain = do
              Playing => 'PlayStatus :- put Paused
              _       => 'PlayStatus :- put Playing
         pure True
+    process (Just (KeyDown (KeyAny 'n'))) = do
+        'PlayStatus :- put Step
+        pure True
     process _        = pure True
 
     draw : Running ()
@@ -76,12 +79,14 @@ emain = do
         when ((f `mod` 1000) == 0) (putStrLn (show f))
 
         playStatus <- 'PlayStatus :- get
-        when (playStatus == Playing) ('Grid :- update nextGeneration)
+        when (playStatus /= Paused && (f `mod` 10) == 0) $ do
+            'Grid :- update nextGeneration
+            when (playStatus == Step) $ 'PlayStatus :- put Paused
+        pure ()
 
     eventLoop : Running ()
     eventLoop = do
         draw
-        sleep 15000
         updateWorld
         e <- poll
         continue <- process e
@@ -90,10 +95,9 @@ emain = do
 main : IO ()
 main = runInit
     [ ()
-    , 'Grid := MkGrid 0 0 16 12 (fromList [(1, 0), (1, 1), (1, 2)])
+    , 'Grid := MkGrid 0 0 32 24 (fromList [(1, 0), (1, 1), (1, 2)])
     , 'PlayStatus := Paused
     , 'Frames := 0
     , 1234567890
-    , ()
     , ()
     ] emain

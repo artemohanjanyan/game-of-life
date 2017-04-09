@@ -9,7 +9,7 @@ import Grid
 %access public export
 
 gray : Colour
-gray = MkCol 128 128 128 255
+gray = MkCol 192 192 192 255
 
 record Config where
     constructor MkConfig
@@ -36,7 +36,7 @@ drawGrid (MkConfig width height) grid = do
     cellMargin = 2
 
     lifeMargin : Int
-    lifeMargin = 4 + cellMargin
+    lifeMargin = 2 + cellMargin
 
     drawCell : Int -> Int -> Eff () [SDL_ON]
     drawCell column row =
